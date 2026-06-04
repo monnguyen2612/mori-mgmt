@@ -1,0 +1,91 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  password  String
+  name      String
+  role      String   @default("staff") // "admin", "trainer", "staff"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Customer {
+  id        String   @id @default(uuid())
+  code      String   @unique // e.g., KH0001
+  name      String
+  phone     String
+  dob       DateTime?
+  status    String   @default("ACTIVE") // "ACTIVE", "INACTIVE"
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  packages    CustomerPackage[]
+  attendances AttendanceLog[]
+  revenues    Revenue[]
+}
+
+model CustomerPackage {
+  id                String          @id @default(uuid())
+  customerId        String
+  customer          Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  packageName       String
+  totalSessions     Int             @default(0)
+  usedSessions      Int             @default(0)
+  remainingSessions Int             @default(0) // Total - Used
+  purchaseDate      DateTime        @default(now())
+  activationDate    DateTime?
+  expirationDate    DateTime?
+  status            String          @default("ACTIVE") // "ACTIVE", "INACTIVE", "EXPIRED", "OUT_OF_SESSIONS"
+  notes             String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  attendances       AttendanceLog[]
+  revenues          Revenue[]
+}
+
+model Revenue {
+  id              String           @id @default(uuid())
+  date            DateTime         @default(now())
+  customerId      String
+  customer        Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  packageId       String?
+  package         CustomerPackage? @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  packageName     String
+  totalSessions   Int
+  amount          Float
+  pricePerSession Float            // Calculated: amount / totalSessions
+  paymentMethod   String           // "CASH", "BANK_TRANSFER", "CARD"
+  salesperson     String
+  notes           String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+}
+
+model AttendanceLog {
+  id            String          @id @default(uuid())
+  date          DateTime        @default(now())
+  customerId    String
+  customer      Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  packageId     String
+  package       CustomerPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  packageName   String
+  trainer       String
+  checkInStatus String          @default("CHECKED_IN") // "CHECKED_IN", "CANCELLED"
+  costPerSession Float
+  notes         String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+}
