@@ -1,11 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import CheckInClient from "@/components/CheckInClient";
 
-export const revalidate = 0; // Disable page caching for real-time local updates
+export const revalidate = 30;
 
 export default async function CheckInPage() {
   // Query all customers to let the user check-in anyone in the system
   const customers = await prisma.customer.findMany({
+    take: 200,
     include: {
       packages: {
         orderBy: {

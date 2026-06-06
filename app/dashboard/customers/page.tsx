@@ -1,11 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import CustomersClient from "@/components/CustomersClient";
 
-export const revalidate = 0; // Disable page caching for real-time local updates
+export const revalidate = 30;
 
 export default async function CustomersPage() {
   // Query all customers, sorted by creation date, including their packages
   const customers = await prisma.customer.findMany({
+    take: 200,
     include: {
       packages: {
         orderBy: {

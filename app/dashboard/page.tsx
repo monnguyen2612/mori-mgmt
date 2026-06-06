@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
-export const revalidate = 0; // Disable caching to ensure real-time local statistics
+export const revalidate = 30;
 
 export default async function DashboardPage({ 
   searchParams 
@@ -28,139 +28,75 @@ export default async function DashboardPage({
   const monthStart = new Date(year, month, 1);
   const monthEnd = new Date(year, month + 1, 0, 23, 59, 59, 999);
 
-  // 1. Monthly Revenue
-  const revenueAggregate = await prisma.revenue.aggregate({
-    _sum: { amount: true },
-    where: {
-      date: {
-        gte: monthStart,
-        lte: monthEnd,
-      },
-    },
-  });
-  const monthlyRevenue = revenueAggregate._sum.amount || 0;
-
-  // 2. Total Active Customers
-  const activeCustomersCount = await prisma.customer.count({
-    where: { status: "ACTIVE" },
-  });
-
-  // 3. Total Attendance Logs (Checked In)
-  const totalSessionsCount = await prisma.attendanceLog.count({
-    where: { checkInStatus: "CHECKED_IN" },
-  });
-
-  // 4. Warning Customer Packages (Remaining <= 3 or Expiring in <= 7 days)
   const warningThresholdDate = new Date();
   warningThresholdDate.setDate(warningThresholdDate.getDate() + 7);
 
-  const warningPackages = await prisma.customerPackage.findMany({
-    where: {
-      status: "ACTIVE",
-      OR: [
-        { remainingSessions: { lte: 3 } },
-        {
-          AND: [
-            { expirationDate: { lte: warningThresholdDate } },
-            { expirationDate: { gte: new Date() } },
-          ],
-        },
-      ],
-    },
-    include: {
-      customer: {
-        select: {
-          id: true,
-          code: true,
-          name: true,
-          phone: true,
-        },
+  const [
+    revenueAggregate,
+    activeCustomersCount,
+    totalSessionsCount,
+    warningPackages,
+    topCustomersLogs,
+    trainerLogs,
+    revenuesThisMonth,
+  ] = await Promise.all([
+    prisma.revenue.aggregate({
+      _sum: { amount: true },
+      where: {
+        date: { gte: monthStart, lte: monthEnd },
       },
-    },
-    orderBy: {
-      remainingSessions: "asc",
-    },
-  });
-  const warningsCount = warningPackages.length;
-
-  // 5. Top 5 Customers (By total checked-in sessions)
-  const topCustomersLogs = await prisma.attendanceLog.groupBy({
-    by: ["customerId"],
-    _count: { id: true },
-    where: { checkInStatus: "CHECKED_IN" },
-    orderBy: {
-      _count: { id: "desc" },
-    },
-    take: 5,
-  });
-
-  const topCustomers = await Promise.all(
-    topCustomersLogs.map(async (log) => {
-      const customer = await prisma.customer.findUnique({
-        where: { id: log.customerId },
-        include: {
-          packages: {
-            select: {
-              packageName: true,
-            },
+    }),
+    prisma.customer.count({ where: { status: "ACTIVE" } }),
+    prisma.attendanceLog.count({ where: { checkInStatus: "CHECKED_IN" } }),
+    prisma.customerPackage.findMany({
+      where: {
+        status: "ACTIVE",
+        OR: [
+          { remainingSessions: { lte: 3 } },
+          {
+            AND: [
+              { expirationDate: { lte: warningThresholdDate } },
+              { expirationDate: { gte: new Date() } },
+            ],
+          },
+        ],
+      },
+      include: {
+        customer: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            phone: true,
           },
         },
-      });
-      return {
-        id: log.customerId,
-        name: customer?.name || "Khách ẩn",
-        code: customer?.code || "",
-        usedSessions: log._count.id,
-        packagesList: customer?.packages.map((p) => p.packageName).join(", ") || "Không có gói",
-      };
-    })
-  );
-
-  // 6. Top HLV (Trainers) by Session count (this month)
-  const trainerLogs = await prisma.attendanceLog.groupBy({
-    by: ["trainer"],
-    _count: { id: true },
-    _sum: { costPerSession: true },
-    where: {
-      checkInStatus: "CHECKED_IN",
-      date: {
-        gte: monthStart,
-        lte: monthEnd,
       },
-    },
-    orderBy: {
-      _count: {
-        id: "desc",
+      orderBy: { remainingSessions: "asc" },
+    }),
+    prisma.attendanceLog.groupBy({
+      by: ["customerId"],
+      _count: { id: true },
+      where: { checkInStatus: "CHECKED_IN" },
+      orderBy: { _count: { id: "desc" } },
+      take: 5,
+    }),
+    prisma.attendanceLog.groupBy({
+      by: ["trainer"],
+      _count: { id: true },
+      _sum: { costPerSession: true },
+      where: {
+        checkInStatus: "CHECKED_IN",
+        date: { gte: monthStart, lte: monthEnd },
       },
-    },
-    take: 10,
-  });
-
-  const commissionRate = parseFloat(process.env.TRAINER_COMMISSION_RATE || "0.5");
-
-  const trainerStats = trainerLogs.map((log) => ({
-    name: log.trainer || "Chưa phân công",
-    count: log._count.id,
-    totalSessionValue: log._sum.costPerSession || 0,
-    commission: (log._sum.costPerSession || 0) * commissionRate,
-  }));
-
-  // 7. Monthly Revenue Trend Chart data
-  const revenuesThisMonth = await prisma.revenue.findMany({
-    where: {
-      date: {
-        gte: monthStart,
-        lte: monthEnd,
-      },
-    },
-    select: {
-      date: true,
-      amount: true,
-    },
-    orderBy: {
-      date: "asc",
-    },
-  });
+      orderBy: { _count: { id: "desc" } },
+      take: 10,
+    }),
+    prisma.revenue.findMany({
+      where: { date: { gte: monthStart, lte: monthEnd } },
+      select: { date: true, amount: true },
+      orderBy: { date: "asc" },
+    }),
+  ]);
 
   // Group revenue by day
   const dailyRevenues: { [key: string]: number } = {};

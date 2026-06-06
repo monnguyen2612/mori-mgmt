@@ -1,11 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import RevenuesClient from "@/components/RevenuesClient";
 
-export const revalidate = 0; // Disable page caching for real-time local updates
+export const revalidate = 30;
 
 export default async function RevenuesPage() {
   // Query all revenue records, including linked customer info
   const revenues = await prisma.revenue.findMany({
+    take: 200,
     include: {
       customer: {
         select: {
@@ -22,6 +23,7 @@ export default async function RevenuesPage() {
 
   // Query all customers to let the user link a customer to a new invoice
   const customers = await prisma.customer.findMany({
+    take: 200,
     select: {
       id: true,
       code: true,
