@@ -35,12 +35,14 @@ interface SettingsClientProps {
   backupFiles: BackupFile[];
   users: SystemUser[];
   currentUserRole: string;
+  isCloudDb: boolean;
 }
 
 export default function SettingsClient({
   backupFiles,
   users,
   currentUserRole,
+  isCloudDb,
 }: SettingsClientProps) {
   const [isPending, startTransition] = useTransition();
   const [backupMsg, setBackupMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
