@@ -98,6 +98,25 @@ export default async function DashboardPage({
     }),
   ]);
 
+  const monthlyRevenue = revenueAggregate._sum.amount || 0;
+  const warningsCount = warningPackages.length;
+
+  const topCustomerDetails = await prisma.customer.findMany({
+    where: { id: { in: topCustomersLogs.map((l) => l.customerId) } },
+    include: { packages: { select: { packageName: true } } },
+  });
+
+  const topCustomers = topCustomersLogs.map((log) => {
+    const customer = topCustomerDetails.find((c) => c.id === log.customerId);
+    return {
+      id: log.customerId,
+      name: customer?.name || "Khách ẩn",
+      code: customer?.code || "",
+      usedSessions: log._count.id,
+      packagesList: customer?.packages.map((p) => p.packageName).join(", ") || "Không có gói",
+    };
+  });
+
   // Group revenue by day
   const dailyRevenues: { [key: string]: number } = {};
   
@@ -121,6 +140,15 @@ export default async function DashboardPage({
   const revenueTrendData = Object.entries(dailyRevenues).map(([date, revenue]) => ({
     date,
     revenue,
+  }));
+
+  const commissionRate = parseFloat(process.env.TRAINER_COMMISSION_RATE || "0.5");
+
+  const trainerStats = trainerLogs.map((log) => ({
+    name: log.trainer || "Chưa phân công",
+    count: log._count.id,
+    totalSessionValue: log._sum.costPerSession || 0,
+    commission: (log._sum.costPerSession || 0) * commissionRate,
   }));
 
   return (
