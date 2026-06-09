@@ -6,7 +6,6 @@ export const revalidate = 30;
 export default async function LogsPage() {
   // Query all attendance logs
   const logs = await prisma.attendanceLog.findMany({
-    take: 200,
     include: {
       customer: {
         select: {
