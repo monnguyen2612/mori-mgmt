@@ -12,7 +12,7 @@ function safeRevalidatePath(path: string) {
   }
 }
 
-export async function checkInCustomer(customerId: string, packageId: string, trainer: string, notes: string) {
+export async function checkInCustomer(customerId: string, packageId: string, trainer: string, notes: string, checkInDate?: string) {
   try {
     if (!packageId) {
       throw new Error("Vui lòng chọn gói tập để check-in.");
@@ -31,17 +31,30 @@ export async function checkInCustomer(customerId: string, packageId: string, tra
       throw new Error("Không tìm thấy gói tập của khách hàng.");
     }
 
-    if (pkg.customer.status === "INACTIVE" || pkg.status === "INACTIVE") {
-      throw new Error("Gói tập hoặc học viên đang ở trạng thái ngưng hoạt động.");
+    const selectedDate = checkInDate ? new Date(checkInDate) : new Date();
+    const referenceDate = selectedDate < new Date() ? selectedDate : new Date();
+
+    // Allow backdated check-ins when package was still valid on the selected date
+    if (pkg.customer.status === "INACTIVE") {
+      throw new Error("Học viên đang ở trạng thái ngưng hoạt động.");
+    }
+
+    if (pkg.status === "INACTIVE") {
+      throw new Error("Gói tập đang ở trạng thái ngưng hoạt động.");
     }
 
     if (pkg.remainingSessions <= 0) {
       throw new Error("Gói tập được chọn đã hết buổi tập (Còn lại = 0).");
     }
 
-    // Check expiration
-    if (pkg.expirationDate && new Date(pkg.expirationDate) < new Date()) {
-      throw new Error("Gói tập được chọn đã hết hạn sử dụng.");
+    // Check expiration against the reference date (selected past date if applicable)
+    if (pkg.expirationDate && new Date(pkg.expirationDate) < referenceDate) {
+      throw new Error("Gói tập được chọn đã hết hạn sử dụng vào ngày check-in.");
+    }
+
+    // Check that selected date is not after today
+    if (selectedDate > new Date()) {
+      throw new Error("Không thể check-in cho ngày trong tương lai.");
     }
 
     // 2. Fetch cost per session from linked revenue or fallback
@@ -89,6 +102,7 @@ export async function checkInCustomer(customerId: string, packageId: string, tra
         costPerSession,
         notes: notes?.trim() || null,
         checkInStatus: "CHECKED_IN",
+        date: selectedDate,
       },
     });
 
